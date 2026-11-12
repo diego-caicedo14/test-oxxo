@@ -1,0 +1,69 @@
+name: Agente HU
+
+# Se dispara cuando se crea una rama (p. ej. desde Azure Boards → New GitHub branch).
+# El evento "create" no admite filtro por rama, así que el filtro va en el "if" del job.
+# El workflow debe existir en la rama base (main) para que las ramas nuevas lo hereden.
+#
+# Convención: <prefijo>/AB<ID>-<descripcion>
+#   prefijos: feature | bugfix | hotfix | chore
+#   ej: feature/AB1234-login-sso
+on:
+  create:
+  workflow_dispatch:
+    inputs:
+      rama:
+        description: "Nombre de rama a simular (ej. feature/AB1234-login-sso)"
+        required: true
+        default: "feature/AB1234-login-sso"
+
+permissions:
+  contents: read
+
+env:
+  PATRON_RAMA: '^(feature|bugfix|hotfix|chore)/AB([0-9]+)-[a-z0-9]+(-[a-z0-9]+)*$'
+
+jobs:
+  analizar-hu:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'create' && github.ref_type == 'branch' && (
+        startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'bugfix/') ||
+        startsWith(github.ref_name, 'hotfix/')  || startsWith(github.ref_name, 'chore/')))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar nombre de la rama y extraer el work item
+        id: wi
+        env:
+          RAMA: ${{ github.event_name == 'workflow_dispatch' && inputs.rama || github.ref_name }}
+        run: |
+          if [[ "$RAMA" =~ $PATRON_RAMA ]]; then
+            TIPO="${BASH_REMATCH[1]}"
+            WORK_ITEM="${BASH_REMATCH[2]}"
+          else
+            echo "::error::La rama '$RAMA' no cumple la convención <prefijo>/AB<ID>-<descripcion> (prefijos: feature, bugfix, hotfix, chore; descripción en minúsculas, números y guiones). Ej: feature/AB1234-login-sso"
+            exit 1
+          fi
+          echo "rama=$RAMA"           >> "$GITHUB_OUTPUT"
+          echo "tipo=$TIPO"           >> "$GITHUB_OUTPUT"
+          echo "work_item=$WORK_ITEM" >> "$GITHUB_OUTPUT"
+
+      - name: Ejecutar agente (placeholder)
+        env:
+          RAMA: ${{ steps.wi.outputs.rama }}
+          TIPO: ${{ steps.wi.outputs.tipo }}
+          WORK_ITEM: ${{ steps.wi.outputs.work_item }}
+        run: |
+          echo "Aquí se va a ejecutar el agente que analiza la historia de usuario AB#$WORK_ITEM"
+          echo "  Tipo      : $TIPO"
+          echo "  Rama      : $RAMA"
+          echo "  Commit    : $GITHUB_SHA"
+          {
+            echo "### Agente HU"
+            echo "| Campo | Valor |"
+            echo "|---|---|"
+            echo "| Work item (Azure Boards) | \`AB#$WORK_ITEM\` |"
+            echo "| Tipo | \`$TIPO\` |"
+            echo "| Rama | \`$RAMA\` |"
+            echo ""
+            echo "_Placeholder: aquí se ejecutará el agente que analiza la historia de usuario._"
+          } >> "$GITHUB_STEP_SUMMARY"
