@@ -21,6 +21,9 @@ permissions:
 
 env:
   PATRON_RAMA: '^(feature|bugfix|hotfix|chore)/AB([0-9]+)-[a-z0-9]+(-[a-z0-9]+)*$'
+  # Variables del repo (Settings → Secrets and variables → Actions → Variables)
+  AZDO_ORG_URL: ${{ vars.AZDO_ORG_URL }}   # ej: https://dev.azure.com/diegocaicedo46
+  AZDO_PROJECT: ${{ vars.AZDO_PROJECT }}   # ej: test-oxxo
 
 jobs:
   analizar-hu:
@@ -46,24 +49,38 @@ jobs:
           echo "rama=$RAMA"           >> "$GITHUB_OUTPUT"
           echo "tipo=$TIPO"           >> "$GITHUB_OUTPUT"
           echo "work_item=$WORK_ITEM" >> "$GITHUB_OUTPUT"
+          if [[ -n "$AZDO_ORG_URL" && -n "$AZDO_PROJECT" ]]; then
+            URL="${AZDO_ORG_URL%/}/$(jq -rn --arg p "$AZDO_PROJECT" '$p|@uri')/_workitems/edit/$WORK_ITEM"
+          else
+            echo "::warning::Faltan las variables AZDO_ORG_URL / AZDO_PROJECT; no se puede armar el link al work item"
+            URL=""
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
 
       - name: Ejecutar agente (placeholder)
         env:
           RAMA: ${{ steps.wi.outputs.rama }}
           TIPO: ${{ steps.wi.outputs.tipo }}
           WORK_ITEM: ${{ steps.wi.outputs.work_item }}
+          URL: ${{ steps.wi.outputs.url }}
         run: |
           echo "Aquí se va a ejecutar el agente que analiza la historia de usuario AB#$WORK_ITEM"
           echo "  Tipo      : $TIPO"
           echo "  Rama      : $RAMA"
           echo "  Commit    : $GITHUB_SHA"
+          echo "  Work item : ${URL:-(sin link)}"
+          # Anotación visible en la página del run
+          [[ -n "$URL" ]] && echo "::notice title=Work item AB#$WORK_ITEM::$URL"
+          if [[ -n "$URL" ]]; then WI_MD="[AB#$WORK_ITEM]($URL)"; else WI_MD="\`AB#$WORK_ITEM\`"; fi
+          RAMA_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/$RAMA"
           {
             echo "### Agente HU"
             echo "| Campo | Valor |"
             echo "|---|---|"
-            echo "| Work item (Azure Boards) | \`AB#$WORK_ITEM\` |"
+            echo "| Work item (Azure Boards) | $WI_MD |"
             echo "| Tipo | \`$TIPO\` |"
-            echo "| Rama | \`$RAMA\` |"
+            echo "| Rama | [\`$RAMA\`]($RAMA_URL) |"
+            echo "| Commit base | \`${GITHUB_SHA:0:7}\` |"
             echo ""
             echo "_Placeholder: aquí se ejecutará el agente que analiza la historia de usuario._"
           } >> "$GITHUB_STEP_SUMMARY"
